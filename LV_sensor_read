@@ -1,0 +1,87 @@
+import pigpio
+import time
+
+TICK_TIME = 12  # microseconds
+
+# Define the ticks for each field
+TICKS = {
+    "SYNC": 56,
+    "STATUS": 12,
+    "S1D1": 27,
+    "S1D2": 17,
+    "S1D3": 22,
+    "S2D1": 14,
+    "S2D2": 20,
+    "S2D3": 12,
+    "CRC": 21
+}
+
+BUFFER_SIZE = 12
+
+class SENTDecoder:
+    def __init__(self, pi, gpio, callback):
+        self.pi = pi
+        self.gpio = gpio
+        self.callback = callback
+
+        self.tick = None
+        self.last_level = 0
+        self.field = "SYNC"
+
+        https://urldefense.com/v3/__http://self.data__;!!FtR4BK4x7WL3xYs!7ThC5iLMHkA8UCKK2PQF-An8m-r4_KOSGwVhczWJjZ5TEf2AC7ejzO-wEFWfDL-Rz9HCDqvhPlgqYkHSjw$  = {k: 0 for k in TICKS.keys() if k != "SYNC"}
+        self.frame_buffer = []
+
+        self.pi.set_mode(gpio, pigpio.INPUT)
+        self.cb = self.pi.callback(gpio, pigpio.EITHER_EDGE, self._cb)
+
+    def _cb(self, gpio, level, tick):
+        if self.last_level == 1 and level == 0:  # Falling edge
+            pulse_width = pigpio.tickDiff(self.tick, tick)
+
+            if self.field == "SYNC":
+                if abs(pulse_width - (TICKS["SYNC"] - 5) * TICK_TIME) < 2 * TICK_TIME:  # Minus 5 ticks of low state
+                    pass
+                else:
+                    # Error in pulse width
+                    self.field = "SYNC"
+                    https://urldefense.com/v3/__http://self.data__;!!FtR4BK4x7WL3xYs!7ThC5iLMHkA8UCKK2PQF-An8m-r4_KOSGwVhczWJjZ5TEf2AC7ejzO-wEFWfDL-Rz9HCDqvhPlgqYkHSjw$  = {k: 0 for k in TICKS.keys() if k != "SYNC"}
+            else:
+                x = (pulse_width - 12 * TICK_TIME) / TICK_TIME
+                self.data[self.field] = int(round(x))
+
+                next_field = next((k for k, v in TICKS.items() if k > self.field), None)
+                if next_field:
+                    self.field = next_field
+                else:
+                    self.frame_buffer.append(self.data.copy())
+                    if len(self.frame_buffer) >= BUFFER_SIZE:
+                        self.callback(self.frame_buffer)
+                        self.frame_buffer.clear()
+
+                    https://urldefense.com/v3/__http://self.data__;!!FtR4BK4x7WL3xYs!7ThC5iLMHkA8UCKK2PQF-An8m-r4_KOSGwVhczWJjZ5TEf2AC7ejzO-wEFWfDL-Rz9HCDqvhPlgqYkHSjw$  = {k: 0 for k in TICKS.keys() if k != "SYNC"}
+                    self.field = "SYNC"
+
+        elif self.last_level == 0 and level == 1:  # Rising edge
+            self.tick = tick
+
+        self.last_level = level
+
+    def cancel(self):
+        self.cb.cancel()
+
+def data_received(buffered_data):
+    for idx, data in enumerate(buffered_data, 1):
+        print(f"Frame {idx}: {data}")
+
+pi = pigpio.pi()
+if not pi.connected:
+    exit()
+
+decoder = SENTDecoder(pi, 4, data_received)  # GPIO 4 as an example
+
+try:
+    while True:
+        time.sleep(1)
+except KeyboardInterrupt:
+    decoder.cancel()
+    pi.stop()
